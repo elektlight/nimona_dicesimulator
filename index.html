@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>なにもない村　判定シミュレーター</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            max-width: 500px;
+            width: 100%;
+        }
+        h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #555;
+        }
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .btn-primary {
+            background-color: #3498db;
+            color: white;
+        }
+        .btn-secondary {
+            background-color: #2ecc71;
+            color: white;
+        }
+        button:hover {
+            opacity: 0.8;
+        }
+        .result-box {
+            background: #eef2f5;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+        .result-title {
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-bottom: 5px;
+        }
+        .result-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .log-box {
+            background: #fffbe6;
+            border-left: 4px solid #f1c40f;
+            padding: 10px 15px;
+            font-size: 14px;
+            border-radius: 4px;
+            display: none;
+        }
+        .dice-badge {
+            display: inline-block;
+            background: #34495e;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin: 2px;
+            font-family: monospace;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>なにもない村　判定シミュレーター</h2>
+    
+    <div class="form-group">
+        <label for="diceCount">振るダイスの個数(D10):</label>
+        <input type="number" id="diceCount" value="" min="2" max="30">
+    </div>
+    
+    <div class="form-group">
+        <label for="targetValue">判定値 (100超過ボーナス対応):</label>
+        <input type="number" id="targetValue" value="" min="1">
+    </div>
+    
+    <div class="form-group">
+        <label for="minSuccess">目標とする最低成功度:</label>
+        <input type="number" id="minSuccess" value="" min="1">
+    </div>
+
+    <div class="button-group">
+        <button class="btn-secondary" onclick="runSingleTest()">1回テストロール</button>
+        <button class="btn-primary" onclick="runSimulation()">1万回シミュレーション</button>
+    </div>
+
+    <div id="logBox" class="log-box"></div>
+
+    <div class="result-box">
+        <div class="result-title">目標成功度以上の達成確率</div>
+        <div class="result-value" id="resProb">-- %</div>
+    </div>
+
+    <div class="result-box">
+        <div class="result-title">全体の成功度 期待値</div>
+        <div class="result-value" id="resExp">--</div>
+    </div>
+</div>
+
+<script>
+    // 成功度を計算するコア機能
+    function calculateSuccess(val, target) {
+        // 00(0)は自動失敗、または判定値オーバーなら失敗
+        if (val === 0 || val > target) return 0;
+        
+        // 基本成功度1 ＋ 超過ボーナス(100ごとに+10)
+        let stepBonus = 10 * Math.floor((target - val) / 100);
+        
+        // ゾロ目ボーナス(11〜99の場合)
+        let zoroBonus = (val % 11 === 0) ? (val / 11) : 0;
+        
+        return 1 + stepBonus + zoroBonus;
+    }
+
+    // プレイヤーの「最適なダイス選択」をエミュレートする機能
+    function getBestRollResult(dice, target) {
+        let maxSuccess = 0;
+        let bestPair = "失敗(なし)";
+        
+        // 手持ちの全ダイスの組み合わせ(2つ)を総当たりでチェック
+        for (let i = 0; i < dice.length; i++) {
+            for (let j = 0; j < dice.length; j++) {
+                if (i === j) continue; // 同じダイスは選べない
+                
+                let val = dice[i] * 10 + dice[j];
+                let succ = calculateSuccess(val, target);
+                
+                if (succ > maxSuccess) {
+                    maxSuccess = succ;
+                    bestPair = (val < 10 ? "0" + val : val); // 表示用に0埋め
+                }
+            }
+        }
+        return { success: maxSuccess, pair: bestPair };
+    }
+
+    // 1万回シミュレーション実行
+    function runSimulation() {
+        const n = parseInt(document.getElementById('diceCount').value);
+        const target = parseInt(document.getElementById('targetValue').value);
+        const minSuccess = parseInt(document.getElementById('minSuccess').value);
+        
+        let achieveCount = 0;
+        let totalSuccess = 0;
+        const SIM_COUNT = 10000;
+
+        for (let iter = 0; iter < SIM_COUNT; iter++) {
+            // ダイスをn個振る
+            let dice = [];
+            for (let d = 0; d < n; d++) {
+                dice.push(Math.floor(Math.random() * 10));
+            }
+            
+            // 最適な結果を取得
+            let result = getBestRollResult(dice, target);
+            
+            if (result.success >= minSuccess) {
+                achieveCount++;
+            }
+            totalSuccess += result.success;
+        }
+
+        // 結果を画面に表示
+        const prob = (achieveCount / SIM_COUNT) * 100;
+        const exp = totalSuccess / SIM_COUNT;
+
+        document.getElementById('resProb').innerText = prob.toFixed(2) + " %";
+        document.getElementById('resExp').innerText = exp.toFixed(2);
+        
+        let logBox = document.getElementById('logBox');
+        logBox.style.display = 'none'; // シミュレーション時はログを隠す
+    }
+
+    // 1回だけ振って動きを確認するテスト機能
+    function runSingleTest() {
+        const n = parseInt(document.getElementById('diceCount').value);
+        const target = parseInt(document.getElementById('targetValue').value);
+        
+        let dice = [];
+        let diceHtml = "";
+        for (let d = 0; d < n; d++) {
+            let roll = Math.floor(Math.random() * 10);
+            dice.push(roll);
+            diceHtml += `<span class="dice-badge">${roll}</span>`;
+        }
+        
+        let result = getBestRollResult(dice, target);
+        
+        let logBox = document.getElementById('logBox');
+        logBox.style.display = 'block';
+        logBox.innerHTML = `
+            <strong>【テストロール結果】</strong><br>
+            出目: ${diceHtml}<br>
+            最適選択: <strong>${result.pair}</strong><br>
+            最終成功度: <strong>${result.success}</strong>
+        `;
+    }
+</script>
+
+</body>
+</html>
