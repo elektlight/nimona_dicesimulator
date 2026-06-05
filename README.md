@@ -1,0 +1,2 @@
+# nimona_dicesimulator
+なにもない村の判定シミュレーターです
